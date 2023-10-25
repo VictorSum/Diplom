@@ -1,0 +1,83 @@
+---
+- hosts: elastic
+  become: yes
+# become_user: root
+  gather_facts: true
+
+  vars:
+    elasticsearch_version: "7.x"
+    elasticsearch_network_host: "{{ groups['elastic'][0] }}" 
+    elasticsearch_http_port: "9200"
+
+    elasticsearch_heap_size_min: 1g
+    elasticsearch_heap_size_max: 1g
+    elasticsearch_extra_options: 'discovery.seed_hosts: ["127.0.0.1"]'
+
+    # Pre-loaded lib to make all trafic go through TOR
+    # when LD_PRELOAD environmental variable is set to the TOR lib:
+    torlib: "/usr/lib/x86_64-linux-gnu/torsocks/libtorsocks.so"
+
+  tasks:
+
+    - name: Update apt cache
+      apt:
+        update_cache: true
+
+    - name: Install dependencies
+      apt:
+        name:
+          - apt-transport-https
+          - gnupg2
+        state: present
+#--------changed go
+    - name: Install elasticsearch
+      ansible.builtin.apt:
+        deb: http://edu.yakit.ru/elasticsearch-7.16.3-amd64.deb
+#--------changed end
+    - name: Configure Elasticsearch 7+
+      template:
+        src: "{{ item | basename }}.j2"
+        dest: "{{ item }}"
+        owner: root
+        group: elasticsearch
+        mode: 0660
+      with_items:
+        - /etc/elasticsearch/elasticsearch.yml
+        - /etc/elasticsearch/jvm.options.d/heap.options
+      notify: restart elasticsearch
+
+    - name: Force a restart if configuration has changed.
+      meta: flush_handlers
+
+    - name: Start Elasticsearch
+      service:
+        name: elasticsearch
+        state: started
+        enabled: true
+
+    - name: Make sure Elasticsearch is running before proceeding.
+      wait_for:
+        host: "{{ elasticsearch_network_host }}"
+        port: "{{ elasticsearch_http_port }}"
+        delay: 3
+        timeout: 300
+
+#--------changed go - elsi chto udalit
+    - name: Remove useless packages from the cache
+      ansible.builtin.apt:
+        autoclean: yes
+
+    - name: Remove dependencies that are no longer required
+      ansible.builtin.apt:
+        autoremove: yes
+
+    - name: Run the equivalent of "apt-get clean" as a separate step
+      apt:
+        clean: yes
+#--------changed end
+ 
+  handlers:
+    - name: restart elasticsearch
+      service:
+        name: elasticsearch
+        state: restarted

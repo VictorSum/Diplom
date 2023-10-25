@@ -4,19 +4,20 @@ terraform {
       source = "yandex-cloud/yandex"
     }
   }
+  required_version = ">= 0.74"
 }
 
-provider "yandex" {  
-  token     = #youtoken
-  cloud_id  = #youcloudid
-  folder_id = #youforderid
+provider "yandex" {
+  token     = var.cloud_access_token
+  cloud_id  = var.cloud_access_cloud_id
+  folder_id = var.cloud_access_folder_id
+  zone      = var.zone
 }
 
-########## WEB #########
-
-resource "yandex_compute_instance" "web-1" {
-  name        = "web-1"
-  hostname    = "web-1"
+#----------------- WWW -----------------------------
+resource "yandex_compute_instance" "nginx-1" {
+  name        = "vm-nginx-1"
+  hostname    = "nginx-1"
   zone        = "ru-central1-a"
 
   resources {
@@ -32,9 +33,9 @@ resource "yandex_compute_instance" "web-1" {
   }
 
   network_interface {
-    subnet_id          = yandex_vpc_subnet.inner-web-1.id
+    subnet_id          = yandex_vpc_subnet.inner-nginx-1.id
     security_group_ids = [yandex_vpc_security_group.inner.id]
-    ip_address         = "192.168.1.3"
+    ip_address         = "10.0.1.3"
   }
 
   metadata = {
@@ -46,9 +47,9 @@ resource "yandex_compute_instance" "web-1" {
   }
 }
 
-resource "yandex_compute_instance" "web-2" {
-  name        = "web-2"
-  hostname    = "web-2"
+resource "yandex_compute_instance" "nginx-2" {
+  name        = "vm-nginx-2"
+  hostname    = "nginx-2"
   zone        = "ru-central1-b"
 
   resources {
@@ -64,9 +65,9 @@ resource "yandex_compute_instance" "web-2" {
   }
 
   network_interface {
-    subnet_id          = yandex_vpc_subnet.inner-web-2.id
+    subnet_id          = yandex_vpc_subnet.inner-nginx-2.id
     security_group_ids = [yandex_vpc_security_group.inner.id]
-    ip_address         = "192.168.2.3"
+    ip_address         = "10.0.2.3"
   }
 
   metadata = {
@@ -78,43 +79,9 @@ resource "yandex_compute_instance" "web-2" {
   }
 }
 
-# Snapshots
-resource "yandex_compute_snapshot_schedule" "default" {
-  name = "vms-snapshots"
-
-  schedule_policy {
-    expression = "0 0 * * *"
-  }
-
-  snapshot_count = 1
-
-  snapshot_spec {
-    description = "snapshot-description"
-    labels = {
-      snapshot-label = "my-snapshot-label-value"
-    }
-  }
-
-  labels = {
-    my-label = "my-label-value"
-  }
-
-  disk_ids = [
-    yandex_compute_instance.web-1.boot_disk[0].device_name,
-    yandex_compute_instance.web-2.boot_disk[0].device_name,
-    yandex_compute_instance.bastion.boot_disk[0].device_name,
-    yandex_compute_instance.grafana.boot_disk[0].device_name,
-    yandex_compute_instance.prometheus.boot_disk[0].device_name,
-    yandex_compute_instance.kibana.boot_disk[0].device_name,
-
-  ]
-
-}
-
-####### Bastion #######
-
+#----------------- bastion -----------------------------
 resource "yandex_compute_instance" "bastion" {
-  name        = "bastion"
+  name        = "vm-bastion"
   hostname    = "bastion"
   zone        = "ru-central1-c"
 
@@ -126,7 +93,7 @@ resource "yandex_compute_instance" "bastion" {
 
   boot_disk {
     initialize_params {
-      image_id = "fd82v0f4ufbnvm3b9s08" # NAT-√®√≠√±√≤√†√≠√±
+      image_id = "fd82v0f4ufbnvm3b9s08" # NAT-ËÌÒÚ‡ÌÒ
     }
   }
 
@@ -134,7 +101,7 @@ resource "yandex_compute_instance" "bastion" {
     subnet_id          = yandex_vpc_subnet.public.id
     nat                = true
     security_group_ids = [yandex_vpc_security_group.inner.id, yandex_vpc_security_group.public-bastion.id]
-    ip_address         = "192.168.4.4"
+    ip_address         = "10.0.4.4"
   }
 
   metadata = {
@@ -146,10 +113,10 @@ resource "yandex_compute_instance" "bastion" {
   }
 }
 
-###### Prometheus #######
 
+##----------------- prometheus -----------------------------
 resource "yandex_compute_instance" "prometheus" {
-  name        = "prometheus"
+  name        = "vm-prometheus"
   hostname    = "prometheus"
   zone        = "ru-central1-c"
 
@@ -168,7 +135,7 @@ resource "yandex_compute_instance" "prometheus" {
   network_interface {
     subnet_id          = yandex_vpc_subnet.inner-services.id
     security_group_ids = [yandex_vpc_security_group.inner.id]
-    ip_address         = "192.168.3.3"
+    ip_address         = "10.0.3.3"
   }
 
   metadata = {
@@ -180,10 +147,9 @@ resource "yandex_compute_instance" "prometheus" {
   }
 }
 
-##### GRAFANA #####
-
+#----------------- grafana -----------------------------
 resource "yandex_compute_instance" "grafana" {
-  name        = "grafana"
+  name        = "vm-grafana"
   hostname    = "grafana"
   zone        = "ru-central1-c"
 
@@ -203,7 +169,7 @@ resource "yandex_compute_instance" "grafana" {
     subnet_id          = yandex_vpc_subnet.public.id
     nat                = true
     security_group_ids = [yandex_vpc_security_group.inner.id, yandex_vpc_security_group.public-grafana.id]
-    ip_address         = "192.168.4.5"
+    ip_address         = "10.0.4.5"
   }
 
   metadata = {
@@ -215,10 +181,9 @@ resource "yandex_compute_instance" "grafana" {
   }
 }
 
-#####  Elasti—Å ######
-
+#----------------- elastic -----------------------------
 resource "yandex_compute_instance" "elastic" {
-  name        = "elastic"
+  name        = "vm-elastic"
   hostname    = "elastic"
   zone        = "ru-central1-c"
 
@@ -238,7 +203,7 @@ resource "yandex_compute_instance" "elastic" {
   network_interface {
     subnet_id          = yandex_vpc_subnet.inner-services.id
     security_group_ids = [yandex_vpc_security_group.inner.id]
-    ip_address         = "192.168.3.4"
+    ip_address         = "10.0.3.4"
   }
 
   metadata = {
@@ -250,10 +215,9 @@ resource "yandex_compute_instance" "elastic" {
   }
 }
 
-####### Kibana ########
-
+#----------------- kibana -----------------------------
 resource "yandex_compute_instance" "kibana" {
-  name        = "kibana"
+  name        = "vm-kibana"
   hostname    = "kibana"
   zone        = "ru-central1-c"
 
@@ -273,7 +237,7 @@ resource "yandex_compute_instance" "kibana" {
     subnet_id          = yandex_vpc_subnet.public.id
     nat                = true
     security_group_ids = [yandex_vpc_security_group.inner.id, yandex_vpc_security_group.public-kibana.id]
-    ip_address         = "192.168.4.3"
+    ip_address         = "10.0.4.3"
   }
 
   metadata = {
@@ -284,4 +248,5 @@ resource "yandex_compute_instance" "kibana" {
     preemptible = true
   }
 }
+
 

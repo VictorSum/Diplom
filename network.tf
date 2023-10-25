@@ -1,4 +1,4 @@
-############## VPC ##############
+#----------------- VPC -----------------------------
 resource "yandex_vpc_network" "newnet" {
   name = "net_project"
   description  = "new network for the project"
@@ -12,54 +12,55 @@ resource "yandex_vpc_route_table" "inner-to-nat" {
     next_hop_address   = yandex_compute_instance.bastion.network_interface.0.ip_address
   }
 }
-############### subnet ##############
+#----------------- subnet -----------------------------
+resource "yandex_vpc_subnet" "inner-nginx-1" {
+  name           = "nginx-1-subnet"
+  zone           = "ru-central1-a"
+  network_id     = yandex_vpc_network.newnet.id
+  v4_cidr_blocks = ["10.0.1.0/28"]
+  route_table_id = yandex_vpc_route_table.inner-to-nat.id
+}
+
+resource "yandex_vpc_subnet" "inner-nginx-2" {
+  name           = "nginx-2-subnet"
+  zone           = "ru-central1-b"
+  network_id     = yandex_vpc_network.newnet.id
+  v4_cidr_blocks = ["10.0.2.0/28"]
+  route_table_id = yandex_vpc_route_table.inner-to-nat.id
+}
+
+resource "yandex_vpc_subnet" "inner-services" {
+  name           = "inner-services-subnet"
+  zone           = "ru-central1-c"
+  network_id     = yandex_vpc_network.newnet.id
+  v4_cidr_blocks = ["10.0.3.0/27"]
+  route_table_id = yandex_vpc_route_table.inner-to-nat.id
+}
 
 resource "yandex_vpc_subnet" "public" {
   name           = "public-subnet"
   zone           = "ru-central1-c"
   network_id     = yandex_vpc_network.newnet.id
-  v4_cidr_blocks = ["192.168.4.0/27"]
+  v4_cidr_blocks = ["10.0.4.0/27"]
 }
 
-resource "yandex_vpc_subnet" "inner-services" {
-  name           = "internal-services-subnet"
-  zone           = "ru-central1-c"
-  network_id     = yandex_vpc_network.newnet.id
-  v4_cidr_blocks = ["192.168.3.0/27"]
-  route_table_id = yandex_vpc_route_table.inner-to-nat.id
-}
 
-resource "yandex_vpc_subnet" "inner-web-2" {
-  name           = "web-2-subnet"
-  zone           = "ru-central1-b"
-  network_id     = yandex_vpc_network.newnet.id
-  v4_cidr_blocks = ["192.168.2.0/28"]
-  route_table_id = yandex_vpc_route_table.inner-to-nat.id
-}
-resource "yandex_vpc_subnet" "inner-web-1" {
-  name           = "web-1-subnet"
-  zone           = "ru-central1-a"
-  network_id     = yandex_vpc_network.newnet.id
-  v4_cidr_blocks = ["192.168.1.0/28"]
-  route_table_id = yandex_vpc_route_table.inner-to-nat.id
-}
-
-############## target_group ##############
+#----------------- target_group -----------------
 resource "yandex_alb_target_group" "new_tg_group" {
-  name = "target-group"
+  name = "new-target-group"
 
   target {
-    ip_address = yandex_compute_instance.web-1.network_interface.0.ip_address
-    subnet_id  = yandex_vpc_subnet.inner-web-1.id
+    ip_address = yandex_compute_instance.nginx-1.network_interface.0.ip_address
+    subnet_id  = yandex_vpc_subnet.inner-nginx-1.id
   }
 
   target {
-    ip_address = yandex_compute_instance.web-2.network_interface.0.ip_address
-    subnet_id  = yandex_vpc_subnet.inner-web-2.id
+    ip_address = yandex_compute_instance.nginx-2.network_interface.0.ip_address
+    subnet_id  = yandex_vpc_subnet.inner-nginx-2.id
   }
 }
 
-############### backend_group ##############
+#----------------- backend_group -----------------
 
 resource "yandex_alb_backend_group" "new_alb_bg" {
   name = "new-backend-group"
@@ -83,7 +84,7 @@ resource "yandex_alb_backend_group" "new_alb_bg" {
     }
   }
 }
-############### HTTP router ##############
+#----------------- HTTP router -----------------
 resource "yandex_alb_http_router" "new_router" {
   name = "new-http-router"
 }
@@ -106,7 +107,7 @@ resource "yandex_alb_virtual_host" "root" {
     }
   }
 }
-############### L7 balancer ##############
+#----------------- L7 balancer -----------------
 
 resource "yandex_alb_load_balancer" "new_lb" {
   name               = "new-load-balancer"
@@ -136,7 +137,7 @@ resource "yandex_alb_load_balancer" "new_lb" {
     }
   }
 }
-######## security_group #######
+#----------------- security_group -----------------
 resource "yandex_vpc_security_group" "inner" {
   name       = "inner-rules"
   network_id = yandex_vpc_network.newnet.id
@@ -144,7 +145,7 @@ resource "yandex_vpc_security_group" "inner" {
   ingress {
     protocol       = "ANY"
     description    = "allow any connection from inner subnets"
-    v4_cidr_blocks = ["192.168.1.0/28", "192.168.2.0/28", "192.168.3.0/27", "192.168.4.0/27"]
+    v4_cidr_blocks = ["10.0.1.0/28", "10.0.2.0/28", "10.0.3.0/27", "10.0.4.0/27"]
   }
 
   egress {

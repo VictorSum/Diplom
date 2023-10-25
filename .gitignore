@@ -1,0 +1,12 @@
+.*
+personal.auto.tfvars
+meta.txt
+/nginx/
+nginx.yml
+test_nginx.yml
+/node/
+terraform*
+
+
+
+
